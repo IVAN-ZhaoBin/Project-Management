@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>创新项目管理</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#4A89DC',
+                        secondary: '#8CC152',
+                        warning: '#F6BB42',
+                        danger: '#E9573F',
+                        light: '#F5F7FA',
+                        dark: '#434A54',
+                        node: {
+                            notStarted: '#AAB2BD',
+                            inProgress: '#4A89DC',
+                            completed: '#8CC152',
+                            delayed: '#E9573F'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+        }
+        .login-wrap {
+            position: fixed;
+            inset: 0;
+            background: #f5f7fa;
+            z-index: 99999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .main-container {
+            display: none;
+        }
+        .hide-all {
+            display: none !important;
+        }
+        .node-arrow {
+            position: absolute;
+            bottom: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-top: 12px solid #E9573F;
+        }
+        .editable {
+            cursor: pointer;
+        }
+        .editable:hover {
+            background: rgba(74,137,220,0.1);
+            border-radius: 4px;
+        }
+        .timeline-node:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .image-upload-overlay {
+            opacity: 0;
+            transition: 0.3s;
+        }
+        .image-container:hover .image-upload-overlay {
+            opacity: 1;
+        }
+        .modal-mask {
+            background: rgba(0,0,0,0.5);
+        }
+        .project-card {
+            transition: all 0.3s ease;
+        }
+        .collapsed-card {
+            max-height: 80px;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans text-dark">
+    <!-- 登录界面 -->
+    <div id="loginLayer" class="login-wrap">
+        <div class="w-full max-w-sm p-8 bg-white rounded-xl shadow-lg">
+            <h2 class="text-xl font-bold text-center mb-6 text-dark">内部系统登录</h2>
+            <div class="mb-4">
+                <label class="block text-sm text-gray-600 mb-1">账号</label>
+                <input id="loginUser" type="text" class="w-full border rounded px-3 py-2 focus:ring-2 focus:outline-none focus:ring-primary" placeholder="请输入账号">
+            </div>
+            <div class="mb-6">
+                <label class="block text-sm text-gray-600 mb-1">密码</label>
+                <input id="loginPwd" type="password" class="w-full border rounded px-3 py-2 focus:ring-2 focus:outline-none focus:ring-primary" placeholder="请输入密码">
+            </div>
+            <button id="loginBtn" class="w-full bg-primary text-white py-2 rounded hover:bg-primary/90">登录</button>
+        </div>
+    </div>
+
+    <!-- 主业务页面 -->
+    <div id="mainContainer" class="main-container">
+        <div class="container mx-auto px-4 py-8 max-w-[1920px]">
+            <header class="mb-8 text-center">
+                <div class="flex justify-between items-center mb-4">
+                    <h1 class="text-[clamp(1.8rem,3vw,2.5rem)] font-bold text-dark">创新项目管理</h1>
+                    <div class="flex gap-3 items-center">
+                        <button id="syncDataBtn" class="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 flex items-center">
+                            <i class="fa fa-cloud-download mr-2"></i>同步云端
+                        </button>
+                        <button id="addProjectBtn" class="px-4 py-2 bg-secondary text-white rounded hover:bg-secondary/90 flex items-center">
+                            <i class="fa fa-plus mr-2"></i>新增项目
+                        </button>
+                        <div class="text-sm text-gray-500">左键拉取｜右键上传</div>
+                    </div>
+                </div>
+                <p class="text-gray-500">单击切换节点 | 双击编辑时间 | 节点自动按实际时间更新状态</p>
+            </header>
+
+            <div class="mb-8">
+                <h2 class="text-xl font-bold mb-4 flex items-center">
+                    <i class="fa fa-spinner text-primary mr-2"></i>进行中项目
+                </h2>
+                <div id="active-projects-container" class="space-y-8"></div>
+            </div>
+
+            <div>
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold flex items-center">
+                        <i class="fa fa-check-circle text-secondary mr-2"></i>已完成项目
+                    </h2>
+                    <button id="toggleCompletedBtn" class="text-primary hover:underline flex items-center">
+                        <i class="fa fa-chevron-down mr-1"></i>
+                        <span id="toggleText">折叠</span>
+                    </button>
+                </div>
+                <div id="completed-projects-container" class="space-y-8 transition-all duration-300"></div>
+            </div>
+        </div>
+
+        <!-- 节点编辑弹窗 -->
+        <div id="editModal" class="modal-mask fixed inset-0 z-50 hidden flex items-center justify-center">
+            <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
+                <h3 class="text-lg font-bold mb-4 text-center text-primary">节点时间编辑</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm text-gray-600 mb-1">计划完成时间</label>
+                        <input type="date" id="modalPlanDate" class="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-primary">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-600 mb-1">实际完成时间</label>
+                        <input type="date" id="modalActualDate" class="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-primary">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-600 mb-1">延期天数</label>
+                        <input type="number" id="modalDelayDay" min="0" class="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-primary">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-600 mb-1">延期至日期</label>
+                        <input type="date" id="modalDelayToDate" class="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-primary">
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end gap-3">
+                    <button id="modalCancel" class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">取消</button>
+                    <button id="modalConfirm" class="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90">确定</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 新增项目弹窗 -->
+        <div id="addProjectModal" class="modal-mask fixed inset-0 z-50 hidden flex items-center justify-center">
+            <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
+                <h3 class="text-lg font-bold mb-4 text-center text-primary">新增项目</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm text-gray-600 mb-1">项目名称</label>
+                        <input type="text" id="newProjectName" placeholder="请输入项目名称" class="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-primary">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-600 mb-1">项目图片</label>
+                        <input type="file" id="newProjectImage" accept="image/*" class="w-full border rounded px-3 py-2">
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end gap-3">
+                    <button id="addProjectCancel" class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">取消</button>
+                    <button id="addProjectConfirm" class="px-4 py-2 bg-secondary text-white rounded hover:bg-secondary/90">确定</button>
+                </div>
+            </div>
+        </div>
+
+        <input type="file" id="imgUpload" class="hidden">
+    </div>
+
+<script>
+// 1. 基础防护：禁用右键、常用快捷键（弱化开发者工具检测，避免拦截登录）
+(function(){
+    document.oncontextmenu = function(){return false;};
+    document.onkeydown = function(e){
+        e = e || window.event;
+        const keyCode = e.keyCode || e.which;
+        if(keyCode === 123) return false;
+        if(e.ctrlKey && (keyCode === 85 || keyCode === 73 || keyCode === 74)) return false;
+    };
+})();
+
+// 自定义登录账号
+const userList = [
+    {user: "admin", pwd: "mg123456"},
+    {user: "admin", pwd: "123456"}
+];
+
+// GitHub 仓库配置（已按你的地址填好）
+const GH_CFG = {
+    owner: "ivan-zhaobin",
+    repo: "Project-Management",
+    branch: "main",
+    filePath: "data.json",
+    token: "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" // 此处填写你的 GitHub Token
+};
+
+GH_CFG.rawUrl = `https://raw.githubusercontent.com/${GH_CFG.owner}/${GH_CFG.repo}/${GH_CFG.branch}/${GH_CFG.filePath}`;
+GH_CFG.apiUrl = `https://api.github.com/repos/${GH_CFG.owner}/${GH_CFG.repo}/contents/${GH_CFG.filePath}`;
+
+// 本地存储标识
+const STORAGE_KEY = "proj_data_local_001";
+let currentUploadProjId = null;
+let editTarget = { pid: 0, nid: 0 };
+let isCompletedCollapsed = false;
+
+// 初始默认项目数据
+const defaultData = [
+    {
+        id: 1,
+        name: "AHAN4787-夹桌款坐姿矫正器",
+        image: "https://picsum.photos/seed/ortho1/400/300",
+        nodes: [
+            {id:1,name:"立项阶段-KO",estimatedDate:"2024-03-15",actualDate:"2024-03-12",delayDays:0,delayToDate:"",subtasks:["市场调研完成","竞品分析报告","立项申请提交","立项评审通过","项目团队组建"]},
+            {id:2,name:"原型机阶段-P0",estimatedDate:"2024-04-10",actualDate:"2024-04-08",delayDays:0,delayToDate:"",subtasks:["概念设计评审","3D模型建立","手板制作","初步功能测试","设计优化"]},
+            {id:3,name:"原型机阶段-P1",estimatedDate:"2024-05-05",actualDate:"",delayDays:2,delayToDate:"2024-05-07",subtasks:["详细设计完成","模具设计评审","零部件打样","组装测试","可靠性测试"]},
+            {id:4,name:"工程验证-EVT-T0",estimatedDate:"2024-06-01",actualDate:"",delayDays:0,delayToDate:"",subtasks:["EVT样机制作","功能测试","性能测试","环境测试","问题整改"]},
+            {id:5,name:"工程验证-EVT-T1",estimatedDate:"2024-06-25",actualDate:"",delayDays:0,delayToDate:"",subtasks:["EVT-T1样机制作","回归测试","设计变更验证","工艺优化","EVT总结报告"]},
+            {id:6,name:"工程验证-EVT-T2",estimatedDate:"2024-07-15",actualDate:"",delayDays:0,delayToDate:"",subtasks:["EVT-T2样机制作","全面测试","设计冻结","物料确认","EVT最终报告"]},
+            {id:7,name:"设计验证-DVT",estimatedDate:"2024-08-10",actualDate:"",delayDays:0,delayToDate:"",subtasks:["DVT样机制作","安规测试","EMC测试","可靠性测试","DVT总结"]},
+            {id:8,name:"生产验证-PVT1",estimatedDate:"2024-09-05",actualDate:"",delayDays:0,delayToDate:"",subtasks:["小批量试产","生产工艺验证","工装夹具验证","质量管控","PVT1总结"]},
+            {id:9,name:"生产验证-PVT2",estimatedDate:"2024-09-25",actualDate:"",delayDays:0,delayToDate:"",subtasks:["中批量试产","生产线优化","供应链验证","包装测试","PVT2总结"]},
+            {id:10,name:"量产-MP",estimatedDate:"2024-10-15",actualDate:"",delayDays:0,delayToDate:"",subtasks:["量产准备","首批量产","质量监控","市场投放准备","项目总结"]}
+        ],
+        activeNodeId: 1
+    },
+    {
+        id: 2,
+        name: "AHAN4788-桌面款坐姿矫正器",
+        image: "https://picsum.photos/seed/ortho2/400/300",
+        nodes: [
+            {id:1,name:"立项阶段-KO",estimatedDate:"2024-03-20",actualDate:"2024-03-18",delayDays:0,delayToDate:"",subtasks:["市场调研完成","竞品分析报告","立项申请提交","立项评审通过","项目团队组建"]},
+            {id:2,name:"原型机阶段-P0",estimatedDate:"2024-04-15",actualDate:"2024-04-12",delayDays:0,delayToDate:"",subtasks:["概念设计评审","3D模型建立","手板制作","初步功能测试","设计优化"]},
+            {id:3,name:"原型机阶段-P1",estimatedDate:"2024-05-10",actualDate:"2024-05-08",delayDays:0,delayToDate:"",subtasks:["详细设计完成","模具设计评审","零部件打样","组装测试","可靠性测试"]},
+            {id:4,name:"工程验证-EVT-T0",estimatedDate:"2024-06-05",actualDate:"",delayDays:1,delayToDate:"2024-06-06",subtasks:["EVT样机制作","功能测试","性能测试","环境测试","问题整改"]},
+            {id:5,name:"工程验证-EVT-T1",estimatedDate:"2024-06-30",actualDate:"",delayDays:0,delayToDate:"",subtasks:["EVT-T1样机制作","回归测试","设计变更验证","工艺优化","EVT总结报告"]},
+            {id:6,name:"工程验证-EVT-T2",estimatedDate:"2024-07-20",actualDate:"",delayDays:0,delayToDate:"",subtasks:["EVT-T2样机制作","全面测试","设计冻结","物料确认","EVT最终报告"]},
+            {id:7,name:"设计验证-DVT",estimatedDate:"2024-08-15",actualDate:"",delayDays:0,delayToDate:"",subtasks:["DVT样机制作","安规测试","EMC测试","可靠性测试","DVT总结"]},
+            {id:8,name:"生产验证-PVT1",estimatedDate:"2024-09-10",actualDate:"",delayDays:0,delayToDate:"",subtasks:["小批量试产","生产工艺验证","工装夹具验证","质量管控","PVT1总结"]},
+            {id:9,name:"生产验证-PVT2",estimatedDate:"2024-09-30",actualDate:"",delayDays:0,delayToDate:"",subtasks:["中批量试产","生产线优化","供应链验证","包装测试","PVT2总结"]},
+            {id:10,name:"量产-MP",estimatedDate:"2024-10-20",actualDate:"",delayDays:0,delayToDate:"",subtasks:["量产准备","首批量产","质量监控","市场投放准备","项目总结"]}
+        ],
+        activeNodeId: 4
+    }
+];
+let projects = [];
+
+// DOM 元素预获取
+const loginLayer = document.getElementById('loginLayer');
+const mainContainer = document.getElementById('mainContainer');
+const loginUser = document.getElementById('loginUser');
+const loginPwd = document.getElementById('loginPwd');
+const loginBtn = document.getElementById('loginBtn');
+const modal = document.getElementById('editModal');
+const addProjectModal = document.getElementById('addProjectModal');
+const planDate = document.getElementById('modalPlanDate');
+const actualDate = document.getElementById('modalActualDate');
+const delayDay = document.getElementById('modalDelayDay');
+const delayToDate = document.getElementById('modalDelayToDate');
+const modalCancel = document.getElementById('modalCancel');
+const modalConfirm = document.getElementById('modalConfirm');
+const addProjectCancel = document.getElementById('addProjectCancel');
+const addProjectConfirm = document.getElementById('addProjectConfirm');
+const newProjectName = document.getElementById('newProjectName');
+const newProjectImage = document.getElementById('newProjectImage');
+
+// 登录逻辑
+function checkLogin(){
+    const u = loginUser.value.trim();
+    const p = loginPwd.value.trim();
+    const pass = userList.some(item => item.user === u && item.pwd === p);
+    if(pass){
+        loginLayer.classList.add('hide-all');
+        mainContainer.style.display = 'block';
+        loadLocalData();
+        bindGlobalEvents();
+        render();
+    }else{
+        alert('账号或密码错误');
+        loginPwd.value = '';
+        loginPwd.focus();
+    }
+}
+
+// 自动计算节点状态
+function autoCalcNodeStatus(node){
+    const now = new Date();
+    now.setHours(0,0,0,0);
+    if(node.actualDate) return "completed";
+    if(!node.estimatedDate) return "notStarted";
+    const plan = new Date(node.estimatedDate);
+    plan.setHours(0,0,0,0);
+    return plan < now ? "delayed" : "inProgress";
+}
+function getStatusClass(s){
+    const map = {notStarted:"bg-node-notStarted",inProgress:"bg-node-inProgress",completed:"bg-node-completed",delayed:"bg-node-delayed"};
+    return map[s]||map.notStarted;
+}
+function getStatusIcon(s){
+    const map = {
+        notStarted:'<i class="fa fa-circle-o text-white"></i>',
+        inProgress:'<i class="fa fa-play text-white"></i>',
+        completed:'<i class="fa fa-check text-white"></i>',
+        delayed:'<i class="fa fa-exclamation-triangle text-white"></i>'
+    };
+    return map[s]||map.notStarted;
+}
+
+// 本地数据读写
+function saveData(){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+}
+function loadLocalData(){
+    const local = localStorage.getItem(STORAGE_KEY);
+    projects = local ? JSON.parse(local) : JSON.parse(JSON.stringify(defaultData));
+}
+
+// 拉取云端数据
+async function pullFromGithub(){
+    try{
+        const res = await fetch(GH_CFG.rawUrl + "?t=" + Date.now(), {cache:"no-store"});
+        if(!res.ok) throw new Error("文件读取失败");
+        const json = await res.json();
+        if(!Array.isArray(json)) throw new Error("数据格式错误");
+        projects = json;
+        saveData();
+        render();
+        alert("✅ 同步成功：已拉取云端数据");
+    }catch(e){
+        alert("❌ 拉取失败："+e.message);
+        loadLocalData();
+        render();
+    }
+}
+
+// 上传数据到云端
+async function pushToGithub(){
+    if(!GH_CFG.token){
+        alert("请先配置 GitHub 个人访问令牌");
+        return;
+    }
+    try{
+        const headers = {
+            "Authorization": "token " + GH_CFG.token,
+            "Content-Type": "application/json"
+        };
+        let sha = "";
+        const getRes = await fetch(GH_CFG.apiUrl, {headers});
+        if(getRes.ok){
+            const fileInfo = await getRes.json();
+            sha = fileInfo.sha;
+        }
+        const content = btoa(unescape(encodeURIComponent(JSON.stringify(projects,null,2))));
+        const putRes = await fetch(GH_CFG.apiUrl, {
+            method: "PUT",
+            headers: headers,
+            body: JSON.stringify({
+                message: "数据自动更新 " + new Date().toLocaleString(),
+                content: content,
+                sha: sha
+            })
+        });
+        if(!putRes.ok) throw new Error("上传请求失败");
+        alert("✅ 上传成功：数据已保存至云端");
+    }catch(e){
+        alert("❌ 上传失败："+e.message);
+    }
+}
+
+// 判断项目是否完成
+function isProjectCompleted(proj){
+    return proj.nodes.every(n=>autoCalcNodeStatus(n)==='completed');
+}
+
+// 页面渲染
+function render(){
+    const active = projects.filter(p=>!isProjectCompleted(p));
+    const completed = projects.filter(p=>isProjectCompleted(p));
+    document.getElementById("active-projects-container").innerHTML = renderList(active, false);
+    document.getElementById("completed-projects-container").innerHTML = renderList(completed, true);
+
+    const wrap = document.getElementById("completed-projects-container");
+    isCompletedCollapsed ? wrap.classList.add('collapsed-card') : wrap.classList.remove('collapsed-card');
+    bindEvents();
+}
+
+function renderList(list,isCompleted){
+    if(list.length===0) return `<div class="text-center py-8 text-gray-500">暂无${isCompleted?'已完成':'进行中'}项目</div>`;
+    let html = "";
+    list.forEach(proj=>{
+        const activeNode = proj.nodes.find(n=>n.id===proj.activeNodeId);
+        let nodeHtml = "";
+        proj.nodes.forEach(node=>{
+            const st = autoCalcNodeStatus(node);
+            const isActive = node.id === proj.activeNodeId;
+            let delayTxt = node.delayDays>0 ? `<div class="text-xs text-red-600">延期${node.delayDays}天</div>` : '';
+            nodeHtml += `
+            <div class="timeline-node relative flex-shrink-0 w-[100px] p-2.5 rounded-lg shadow cursor-pointer ${isActive?'ring-2 ring-primary ring-offset-2'}">
+                <div class="w-9 h-9 ${getStatusClass(st)} rounded-full flex items-center justify-center mx-auto mb-2">
+                    ${getStatusIcon(st)}
+                </div>
+                <div class="text-center text-sm">
+                    <div class="font-medium">${node.name}</div>
+                    <div class="text-xs text-gray-600">${node.estimatedDate||'-'}</div>
+                    ${node.actualDate?`<div class="text-xs text-green-600">${node.actualDate}</div>`:''}
+                    ${delayTxt}
+                </div>
+                ${isActive?'<div class="node-arrow"></div>':''}
+            </div>`;
+        });
+
+        let taskHtml = "";
+        activeNode.subtasks.forEach((task,idx)=>{
+            taskHtml += `
+            <div class="p-2 border-b border-gray-100">
+                <div class="flex items-center">
+                    <i class="fa fa-square-o text-gray-400 mr-3"></i>
+                    <div class="editable" data-type="task" data-pid="${proj.id}" data-nid="${activeNode.id}" data-tidx="${idx}">${task}</div>
+                </div>
+            </div>`;
+        });
+
+        html += `
+        <div class="project-card bg-white rounded-xl shadow overflow-hidden relative ${isCompleted&&isCompletedCollapsed?'collapsed-card':''}">
+            <button class="delete-project-btn absolute top-4 right-4 text-danger hover:text-red-800" data-pid="${proj.id}"><i class="fa fa-trash"></i> 删除</button>
+            <div class="flex flex-col md:flex-row">
+                <div class="w-full md:w-1/6 p-4 border-r border-gray-100">
+                    <h3 class="text-lg font-bold editable mb-3" data-type="projName" data-pid="${proj.id}">${proj.name}</h3>
+                    <div class="image-container relative rounded-lg overflow-hidden">
+                        <img src="${proj.image}" class="w-full h-40 object-cover">
+                        <div class="image-upload-overlay absolute inset-0 bg-black/50 flex items-center justify-center">
+                            <button class="upload-img-btn bg-white text-primary px-3 py-1.5 rounded text-sm" data-pid="${proj.id}"><i class="fa fa-upload mr-1"></i>上传</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="w-full md:w-5/6 p-4">
+                    <div class="flex overflow-x-auto gap-2 pb-4">${nodeHtml}</div>
+                    <div class="bg-primary/10 rounded-lg p-4">
+                        <h4 class="text-lg font-medium mb-3 text-center">${activeNode.name} — 子任务</h4>
+                        <div class="bg-white rounded-lg shadow-sm overflow-hidden">${taskHtml}</div>
+                        <div class="mt-3 text-center">
+                            <button class="add-task-btn text-primary text-sm" data-pid="${proj.id}" data-nid="${activeNode.id}"><i class="fa fa-plus mr-1"></i>添加子任务</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    });
+    return html;
+}
+
+// 页面元素事件
+function bindEvents(){
+    let clickTimer = null;
+    document.querySelectorAll(".timeline-node").forEach(el=>{
+        el.onclick = function(){
+            const pid = +this.dataset.pid, nid = +this.dataset.nid;
+            clickTimer = setTimeout(()=>{
+                const p = projects.find(x=>x.id===pid);
+                if(p){
+                    p.activeNodeId = nid;
+                    saveData(); render();
+                }
+            },250);
+        };
+        el.ondblclick = e=>{
+            e.stopPropagation();
+            const pid = +el.dataset.pid, nid = +el.dataset.nid;
+            editTarget = {pid,nid};
+            const node = projects.find(x=>x.id===pid).nodes.find(x=>x.id===nid);
+            planDate.value = node.estimatedDate||'';
+            actualDate.value = node.actualDate||'';
+            delayDay.value = node.delayDays||0;
+            delayToDate.value = node.delayToDate||'';
+            modal.classList.remove('hidden');
+        };
+    });
+
+    document.querySelectorAll(".editable").forEach(el=>{
+        el.ondblclick = function(){
+            const oldVal = this.textContent.trim();
+            const input = document.createElement("input");
+            input.className = "w-full px-2 py-1 border border-primary rounded focus:outline-none";
+            input.value = oldVal;
+            this.replaceWith(input);
+            input.focus();
+            const done = ()=>{
+                const newVal = input.value.trim()||oldVal;
+                const pid = +this.dataset.pid;
+                const p = projects.find(x=>x.id===pid);
+                if(p.name) p.name = newVal;
+                saveData(); render();
+            };
+            input.onblur = done;
+            input.onkeydown = e=>e.key==="Enter"&&done();
+        };
+    });
+
+    document.querySelectorAll(".add-task-btn").forEach(btn=>{
+        btn.onclick = function(){
+            const pid = +this.dataset.pid, nid = +this.dataset.nid;
+            const p = projects.find(x=>x.id===pid);
+            const nd = p.nodes.find(x=>x.id===nid);
+            nd.subtasks.push("新子任务");
+            saveData(); render();
+        };
+    });
+
+    document.querySelectorAll(".upload-img-btn").forEach(btn=>{
+        btn.onclick = e=>{
+            e.stopPropagation();
+            currentUploadProjId = +btn.dataset.pid;
+            document.getElementById("imgUpload").click();
+        };
+    });
+
+    document.querySelectorAll(".delete-project-btn").forEach(btn=>{
+        btn.onclick = function(){
+            if(confirm("确定删除该项目？")){
+                projects = projects.filter(p=>p.id!==+this.dataset.pid);
+                saveData(); render();
+            }
+        };
+    });
+}
+
+// 新建项目
+function createNewProject(name,imgUrl){
+    const newId = projects.length ? Math.max(...projects.map(p=>p.id))+1 : 1;
+    const nodes = JSON.parse(JSON.stringify(defaultData[0].nodes));
+    projects.push({
+        id:newId,
+        name:name,
+        image:imgUrl||`https://picsum.photos/seed/proj${newId}/400/300`,
+        nodes:nodes,
+        activeNodeId:1
+    });
+    saveData(); render();
+}
+
+// 全局事件绑定
+function bindGlobalEvents(){
+    loginBtn.onclick = checkLogin;
+    loginPwd.onkeydown = e=>{if(e.key==='Enter') checkLogin();};
+    loginUser.onkeydown = e=>{if(e.key==='Enter') loginPwd.focus();};
+
+    document.getElementById('syncDataBtn').onclick = pullFromGithub;
+    document.getElementById('syncDataBtn').addEventListener('contextmenu',e=>{
+        e.preventDefault();
+        if(confirm('确定上传覆盖云端 data.json？')) pushToGithub();
+    });
+
+    document.getElementById('toggleCompletedBtn').onclick = ()=>{
+        isCompletedCollapsed = !isCompletedCollapsed;
+        const txt = document.getElementById('toggleText');
+        const icon = document.querySelector('#toggleCompletedBtn i');
+        txt.textContent = isCompletedCollapsed?'展开':'折叠';
+        icon.className = isCompletedCollapsed?'fa fa-chevron-up mr-1':'fa fa-chevron-down mr-1';
+        render();
+    };
+
+    document.getElementById('addProjectBtn').onclick = ()=>{
+        newProjectName.value = '';
+        newProjectImage.value = '';
+        addProjectModal.classList.remove('hidden');
+    };
+    addProjectCancel.onclick = ()=>addProjectModal.classList.add('hidden');
+    addProjectConfirm.onclick = ()=>{
+        const name = newProjectName.value.trim();
+        if(!name){alert("请输入项目名称");return;}
+        const file = newProjectImage.files[0];
+        if(file){
+            const reader = new FileReader();
+            reader.onload = function(){
+                createNewProject(name,reader.result);
+                addProjectModal.classList.add('hidden');
+            };
+            reader.readAsDataURL(file);
+        }else{
+            createNewProject(name);
+            addProjectModal.classList.add('hidden');
+        }
+    };
+
+    modalCancel.onclick = ()=>modal.classList.add('hidden');
+    modalConfirm.onclick = ()=>{
+        const {pid,nid} = editTarget;
+        const p = projects.find(x=>x.id===pid);
+        const nd = p.nodes.find(x=>x.id===nid);
+        nd.estimatedDate = planDate.value;
+        nd.actualDate = actualDate.value;
+        nd.delayDays = parseInt(delayDay.value)||0;
+        nd.delayToDate = delayToDate.value;
+        saveData(); render();
+        modal.classList.add('hidden');
+    };
+
+    document.getElementById("imgUpload").onchange = function(e){
+        const file = e.target.files[0];
+        if(!file||!file.type.startsWith("image/"))return;
+        const reader = new FileReader();
+        reader.onload = function(){
+            const p = projects.find(x=>x.id===currentUploadProjId);
+            if(p){
+                p.image = reader.result;
+                saveData(); render();
+            }
+        };
+        reader.readAsDataURL(file);
+        this.value = "";
+    };
+}
+</script>
+</body>
+</html>
