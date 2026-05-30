@@ -92,7 +92,7 @@
     </style>
 </head>
 <body class="bg-gray-50 font-sans text-dark">
-    <!-- 登录界面 -->
+    <!-- 登录界面（已移除账号密码提示） -->
     <div id="loginLayer" class="login-wrap">
         <div class="w-full max-w-sm p-8 bg-white rounded-xl shadow-lg">
             <h2 class="text-xl font-bold text-center mb-6 text-dark">内部系统登录</h2>
@@ -105,7 +105,6 @@
                 <input id="loginPwd" type="password" class="w-full border rounded px-3 py-2 focus:ring-2 focus:outline-none focus:ring-primary" placeholder="密码">
             </div>
             <button id="loginBtn" class="w-full bg-primary text-white py-2 rounded hover:bg-primary/90">登录</button>
-            <div class="text-xs text-gray-400 mt-3 text-center">测试账号：1/1 或 admin/123</div>
         </div>
     </div>
 
@@ -149,7 +148,7 @@
             </div>
         </div>
 
-        <!-- 节点编辑弹窗 -->
+        <!-- 节点编辑弹窗（完整恢复双击修改） -->
         <div id="editModal" class="modal-mask fixed inset-0 z-50 hidden flex items-center justify-center">
             <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
                 <h3 class="text-lg font-bold mb-4 text-center text-primary">节点时间编辑</h3>
@@ -203,21 +202,18 @@
     </div>
 
 <script>
-// ========== 极简登录（最低安全）==========
+// 极简登录逻辑
 const loginUser = document.getElementById('loginUser');
 const loginPwd  = document.getElementById('loginPwd');
 const loginBtn  = document.getElementById('loginBtn');
 const loginLayer= document.getElementById('loginLayer');
 const mainContainer = document.getElementById('mainContainer');
 
-// 超简单账号密码
 const validUsers = [
-  { u: "1", p: "1" },
-  { u: "admin", p: "123" },
+  { u: "admin", p: "mg123456" },
   { u: "test", p: "test" }
 ];
 
-// 登录点击
 loginBtn.addEventListener('click', function(){
   const u = loginUser.value.trim();
   const p = loginPwd.value.trim();
@@ -233,18 +229,17 @@ loginBtn.addEventListener('click', function(){
   }
 });
 
-// 回车登录
 loginPwd.addEventListener('keydown', e => {
   if (e.key === 'Enter') loginBtn.click();
 });
 
-// ========== 项目原有逻辑（不变）==========
+// 项目基础配置
 const GH_CFG = {
     owner: "ivan-zhaobin",
     repo: "Project-Management",
     branch: "main",
     filePath: "data.json",
-    token: ""
+    token: "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"
 };
 
 GH_CFG.rawUrl = `https://raw.githubusercontent.com/${GH_CFG.owner}/${GH_CFG.repo}/${GH_CFG.branch}/${GH_CFG.filePath}`;
@@ -255,6 +250,38 @@ let currentUploadProjId = null;
 let editTarget = { pid: 0, nid: 0 };
 let isCompletedCollapsed = false;
 
+// 节点状态自动计算（恢复自动更新功能）
+function autoCalcNodeStatus(node){
+    const now = new Date();
+    now.setHours(0,0,0,0);
+    if(node.actualDate) return "completed";
+    if(!node.estimatedDate) return "notStarted";
+    const plan = new Date(node.estimatedDate);
+    plan.setHours(0,0,0,0);
+    return plan < now ? "delayed" : "inProgress";
+}
+
+// 恢复原有节点样式图标
+function getStatusClass(s){
+    const map = {
+        notStarted:"bg-node-notStarted",
+        inProgress:"bg-node-inProgress",
+        completed:"bg-node-completed",
+        delayed:"bg-node-delayed"
+    };
+    return map[s]||map.notStarted;
+}
+function getStatusIcon(s){
+    const map = {
+        notStarted:'<i class="fa fa-circle-o text-white"></i>',
+        inProgress:'<i class="fa fa-play text-white"></i>',
+        completed:'<i class="fa fa-check text-white"></i>',
+        delayed:'<i class="fa fa-exclamation-triangle text-white"></i>'
+    };
+    return map[s]||map.notStarted;
+}
+
+// 初始默认数据
 const defaultData = [
     {
         id: 1,
@@ -295,29 +322,7 @@ const defaultData = [
 ];
 let projects = [];
 
-function autoCalcNodeStatus(node){
-    const now = new Date();
-    now.setHours(0,0,0,0);
-    if(node.actualDate) return "completed";
-    if(!node.estimatedDate) return "notStarted";
-    const plan = new Date(node.estimatedDate);
-    plan.setHours(0,0,0,0);
-    return plan < now ? "delayed" : "inProgress";
-}
-function getStatusClass(s){
-    const map = {notStarted:"bg-node-notStarted",inProgress:"bg-node-inProgress",completed:"bg-node-completed",delayed:"bg-node-delayed"};
-    return map[s]||map.notStarted;
-}
-function getStatusIcon(s){
-    const map = {
-        notStarted:'<i class="fa fa-circle-o text-white"></i>',
-        inProgress:'<i class="fa fa-play text-white"></i>',
-        completed:'<i class="fa fa-check text-white"></i>',
-        delayed:'<i class="fa fa-exclamation-triangle text-white"></i>'
-    };
-    return map[s]||map.notStarted;
-}
-
+// 数据读写
 function saveData(){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
 }
@@ -326,6 +331,7 @@ function loadLocalData(){
     projects = local ? JSON.parse(local) : JSON.parse(JSON.stringify(defaultData));
 }
 
+// 云端同步
 async function pullFromGithub(){
     try{
         const res = await fetch(GH_CFG.rawUrl + "?t=" + Date.now(), {cache:"no-store"});
@@ -342,7 +348,6 @@ async function pullFromGithub(){
         render();
     }
 }
-
 async function pushToGithub(){
     if(!GH_CFG.token){
         alert("请先配置 GitHub 个人访问令牌");
@@ -380,6 +385,7 @@ function isProjectCompleted(proj){
     return proj.nodes.every(n=>autoCalcNodeStatus(n)==='completed');
 }
 
+// 页面渲染（完整恢复节点图标、样式）
 function render(){
     const active = projects.filter(p=>!isProjectCompleted(p));
     const completed = projects.filter(p=>isProjectCompleted(p));
@@ -402,7 +408,7 @@ function renderList(list,isCompleted){
             const isActive = node.id === proj.activeNodeId;
             let delayTxt = node.delayDays>0 ? `<div class="text-xs text-red-600">延期${node.delayDays}天</div>` : '';
             nodeHtml += `
-            <div class="timeline-node relative flex-shrink-0 w-[100px] p-2.5 rounded-lg shadow cursor-pointer" data-pid="${proj.id}" data-nid="${node.id}">
+            <div class="timeline-node relative flex-shrink-0 w-[100px] p-2.5 rounded-lg shadow cursor-pointer ${isActive?'ring-2 ring-primary ring-offset-2'}" data-pid="${proj.id}" data-nid="${node.id}">
                 <div class="w-9 h-9 ${getStatusClass(st)} rounded-full flex items-center justify-center mx-auto mb-2">
                     ${getStatusIcon(st)}
                 </div>
@@ -456,6 +462,7 @@ function renderList(list,isCompleted){
     return html;
 }
 
+// 节点双击打开编辑弹窗（完整还原）
 function bindEvents(){
     let clickTimer = null;
     document.querySelectorAll(".timeline-node").forEach(el=>{
@@ -474,11 +481,11 @@ function bindEvents(){
             const pid = +el.dataset.pid, nid = +el.dataset.nid;
             editTarget = {pid,nid};
             const node = projects.find(x=>x.id===pid).nodes.find(x=>x.id===nid);
-            planDate.value = node.estimatedDate||'';
-            actualDate.value = node.actualDate||'';
-            delayDay.value = node.delayDays||0;
-            delayToDate.value = node.delayToDate||'';
-            modal.classList.remove('hidden');
+            document.getElementById('modalPlanDate').value = node.estimatedDate||'';
+            document.getElementById('modalActualDate').value = node.actualDate||'';
+            document.getElementById('modalDelayDay').value = node.delayDays||0;
+            document.getElementById('modalDelayToDate').value = node.delayToDate||'';
+            document.getElementById('editModal').classList.remove('hidden');
         };
     });
 
@@ -543,6 +550,7 @@ function createNewProject(name,imgUrl){
     saveData(); render();
 }
 
+// 全局事件绑定
 function bindGlobalEvents(){
     document.getElementById('syncDataBtn').onclick = pullFromGithub;
     document.getElementById('syncDataBtn').addEventListener('contextmenu',e=>{
@@ -560,39 +568,43 @@ function bindGlobalEvents(){
     };
 
     document.getElementById('addProjectBtn').onclick = ()=>{
-        newProjectName.value = '';
-        newProjectImage.value = '';
-        addProjectModal.classList.remove('hidden');
+        document.getElementById('newProjectName').value = '';
+        document.getElementById('newProjectImage').value = '';
+        document.getElementById('addProjectModal').classList.remove('hidden');
     };
-    addProjectCancel.onclick = ()=>addProjectModal.classList.add('hidden');
-    addProjectConfirm.onclick = ()=>{
-        const name = newProjectName.value.trim();
+    document.getElementById('addProjectCancel').onclick = ()=>{
+        document.getElementById('addProjectModal').classList.add('hidden');
+    };
+    document.getElementById('addProjectConfirm').onclick = ()=>{
+        const name = document.getElementById('newProjectName').value.trim();
         if(!name){alert("请输入项目名称");return;}
-        const file = newProjectImage.files[0];
+        const file = document.getElementById('newProjectImage').files[0];
         if(file){
             const reader = new FileReader();
             reader.onload = function(){
                 createNewProject(name,reader.result);
-                addProjectModal.classList.add('hidden');
+                document.getElementById('addProjectModal').classList.add('hidden');
             };
             reader.readAsDataURL(file);
         }else{
             createNewProject(name);
-            addProjectModal.classList.add('hidden');
+            document.getElementById('addProjectModal').classList.add('hidden');
         }
     };
 
-    modalCancel.onclick = ()=>modal.classList.add('hidden');
-    modalConfirm.onclick = ()=>{
+    document.getElementById('modalCancel').onclick = ()=>{
+        document.getElementById('editModal').classList.add('hidden');
+    };
+    document.getElementById('modalConfirm').onclick = ()=>{
         const {pid,nid} = editTarget;
         const p = projects.find(x=>x.id===pid);
         const nd = p.nodes.find(x=>x.id===nid);
-        nd.estimatedDate = planDate.value;
-        nd.actualDate = actualDate.value;
-        nd.delayDays = parseInt(delayDay.value)||0;
-        nd.delayToDate = delayToDate.value;
+        nd.estimatedDate = document.getElementById('modalPlanDate').value;
+        nd.actualDate = document.getElementById('modalActualDate').value;
+        nd.delayDays = parseInt(document.getElementById('modalDelayDay').value)||0;
+        nd.delayToDate = document.getElementById('modalDelayToDate').value;
         saveData(); render();
-        modal.classList.add('hidden');
+        document.getElementById('editModal').classList.add('hidden');
     };
 
     document.getElementById("imgUpload").onchange = function(e){
