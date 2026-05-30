@@ -592,15 +592,21 @@ async function pushToGithub(){
     try{
         const headers = {
             "Authorization": "token " + GH_CFG.token,
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0"
         };
         let sha = "";
-        const getRes = await fetch(GH_CFG.apiUrl, {headers});
+        // 先获取文件 sha
+        const getRes = await fetch(GH_CFG.apiUrl, {headers, cache: "no-store"});
         if(getRes.ok){
             const fileInfo = await getRes.json();
             sha = fileInfo.sha;
         }
-        const content = btoa(unescape(encodeURIComponent(JSON.stringify(projects,null,2))));
+        // 标准 UTF-8 转 Base64，修复旧编码兼容问题
+        const jsonStr = JSON.stringify(projects,null,2);
+        const uint8 = new TextEncoder().encode(jsonStr);
+        const content = btoa(String.fromCharCode(...uint8));
+
         const putRes = await fetch(GH_CFG.apiUrl, {
             method: "PUT",
             headers: headers,
@@ -610,9 +616,13 @@ async function pushToGithub(){
                 sha: sha
             })
         });
-        if(!putRes.ok) throw new Error("上传请求失败");
+        if(!putRes.ok) {
+            const err = await putRes.json();
+            throw new Error(err.message || "请求返回异常");
+        }
         alert("✅ 上传成功：数据已保存至云端");
     }catch(e){
+        console.error(e);
         alert("❌ 上传失败："+e.message);
     }
 }
