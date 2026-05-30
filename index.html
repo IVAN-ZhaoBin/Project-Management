@@ -202,7 +202,7 @@
     </div>
 
 <script>
-// 1. 基础防护：禁用右键、常用快捷键（弱化开发者工具检测，避免拦截登录）
+// 1. 基础防护：禁用右键、常用快捷键
 (function(){
     document.oncontextmenu = function(){return false;};
     document.onkeydown = function(e){
@@ -213,19 +213,19 @@
     };
 })();
 
-// 自定义登录账号
+// 2. 自定义登录账号（可自行修改）
 const userList = [
-    {user: "admin", pwd: "mg123456"},
-    {user: "admin", pwd: "123456"}
+    {user: "zhaobin", pwd: "mg123456"},
+    {user: "admin", pwd: "mg123456"}
 ];
 
-// GitHub 仓库配置（已按你的地址填好）
+// 3. GitHub 仓库配置（已适配你的地址）
 const GH_CFG = {
     owner: "ivan-zhaobin",
     repo: "Project-Management",
     branch: "main",
     filePath: "data.json",
-    token: "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" // 此处填写你的 GitHub Token
+    token: "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" // 填入你的 GitHub Token 才能使用上传功能
 };
 
 GH_CFG.rawUrl = `https://raw.githubusercontent.com/${GH_CFG.owner}/${GH_CFG.repo}/${GH_CFG.branch}/${GH_CFG.filePath}`;
@@ -278,7 +278,7 @@ const defaultData = [
 ];
 let projects = [];
 
-// DOM 元素预获取
+// 4. DOM 元素预获取（确保在页面加载完成前获取到）
 const loginLayer = document.getElementById('loginLayer');
 const mainContainer = document.getElementById('mainContainer');
 const loginUser = document.getElementById('loginUser');
@@ -297,8 +297,8 @@ const addProjectConfirm = document.getElementById('addProjectConfirm');
 const newProjectName = document.getElementById('newProjectName');
 const newProjectImage = document.getElementById('newProjectImage');
 
-// 登录逻辑
-function checkLogin(){
+// 5. 登录逻辑（直接绑定点击事件，避免执行顺序问题）
+loginBtn.addEventListener('click', function() {
     const u = loginUser.value.trim();
     const p = loginPwd.value.trim();
     const pass = userList.some(item => item.user === u && item.pwd === p);
@@ -313,7 +313,19 @@ function checkLogin(){
         loginPwd.value = '';
         loginPwd.focus();
     }
-}
+});
+
+// 支持按回车登录
+loginPwd.addEventListener('keydown', function(e) {
+    if(e.key === 'Enter') {
+        loginBtn.click();
+    }
+});
+loginUser.addEventListener('keydown', function(e) {
+    if(e.key === 'Enter') {
+        loginPwd.focus();
+    }
+});
 
 // 自动计算节点状态
 function autoCalcNodeStatus(node){
@@ -573,10 +585,6 @@ function createNewProject(name,imgUrl){
 
 // 全局事件绑定
 function bindGlobalEvents(){
-    loginBtn.onclick = checkLogin;
-    loginPwd.onkeydown = e=>{if(e.key==='Enter') checkLogin();};
-    loginUser.onkeydown = e=>{if(e.key==='Enter') loginPwd.focus();};
-
     document.getElementById('syncDataBtn').onclick = pullFromGithub;
     document.getElementById('syncDataBtn').addEventListener('contextmenu',e=>{
         e.preventDefault();
